@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Lathe.App/Lathe.App.csproj" />
+    <Project Path="src/Lathe.Cam/Lathe.Cam.csproj" />
+    <Project Path="src/Lathe.Core/Lathe.Core.csproj" />
+    <Project Path="src/Lathe.Machine/Lathe.Machine.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Lathe.Machine.Tests/Lathe.Machine.Tests.csproj" />
+    <Project Path="tests/Lathe.Tests/Lathe.Tests.csproj" />
+  </Folder>
+</Solution>

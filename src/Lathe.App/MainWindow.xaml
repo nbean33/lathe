@@ -1,0 +1,405 @@
+﻿<Window x:Class="Lathe.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:inf="clr-namespace:Lathe.App.Infrastructure"
+        xmlns:ae="http://icsharpcode.net/sharpdevelop/avalonedit"
+        xmlns:core="clr-namespace:Lathe.Core;assembly=Lathe.Core"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+        Title="{Binding Title}" Height="900" Width="1500" MinWidth="1000" MinHeight="650"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource Panel}">
+    <Window.Resources>
+        <x:Array x:Key="UnitValues" Type="{x:Type core:UnitSystem}">
+            <core:UnitSystem>Mm</core:UnitSystem>
+            <core:UnitSystem>Inch</core:UnitSystem>
+        </x:Array>
+        <DataTemplate x:Key="SummaryItem"><TextBlock Text="{Binding Summary}" Padding="2"/></DataTemplate>
+    </Window.Resources>
+    <Window.InputBindings>
+        <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}"/>
+        <KeyBinding Key="O" Modifiers="Control" Command="{Binding OpenCommand}"/>
+        <KeyBinding Key="N" Modifiers="Control" Command="{Binding NewCommand}"/>
+        <KeyBinding Key="F5" Command="{Binding GenerateCommand}"/>
+    </Window.InputBindings>
+    <DockPanel>
+        <Menu DockPanel.Dock="Top" Padding="2">
+            <MenuItem Header="_File">
+                <MenuItem Header="_New" InputGestureText="Ctrl+N" Command="{Binding NewCommand}"/>
+                <MenuItem Header="New from _template" x:Name="TemplatesMenu"/>
+                <MenuItem Header="_Open…" InputGestureText="Ctrl+O" Command="{Binding OpenCommand}"/>
+                <MenuItem Header="_Recent" x:Name="RecentMenu" SubmenuOpened="RecentMenu_Opened"/>
+                <Separator/>
+                <MenuItem Header="_Save" InputGestureText="Ctrl+S" Command="{Binding SaveCommand}"/>
+                <MenuItem Header="Save _as…" Command="{Binding SaveAsCommand}"/>
+                <MenuItem Header="_Export G-code…" Command="{Binding SaveGcodeCommand}"/>
+                <Separator/>
+                <MenuItem Header="E_xit" Click="Exit_Click"/>
+            </MenuItem>
+            <MenuItem Header="_Help">
+                <MenuItem Header="_Safety notes" Click="Safety_Click"/>
+                <MenuItem Header="Open _data folder (logs, settings)" Click="DataFolder_Click"/>
+                <MenuItem Header="_About" Click="About_Click"/>
+            </MenuItem>
+        </Menu>
+
+        <Border DockPanel.Dock="Top" Background="#FFF6D6" BorderBrush="#E0C060" BorderThickness="0,0,0,1" Padding="8,3">
+            <TextBlock FontSize="12">
+                <Run FontWeight="Bold">Safety:</Run>
+                <Run>the software Stop/Hold buttons are NOT an emergency stop. Your lathe must have a hardware E-stop. Esc = feed hold.</Run>
+            </TextBlock>
+        </Border>
+
+        <StatusBar DockPanel.Dock="Bottom">
+            <StatusBarItem Content="{Binding FilePath, TargetNullValue='(unsaved project)'}"/>
+            <Separator/>
+            <StatusBarItem Content="{Binding ProgramSummary}"/>
+            <StatusBarItem HorizontalAlignment="Right">
+                <TextBlock><Run Text="Machine: "/><Run Text="{Binding MachineVm.StateText, Mode=OneWay}" FontWeight="SemiBold"/></TextBlock>
+            </StatusBarItem>
+        </StatusBar>
+
+        <TabControl x:Name="Tabs" Margin="4" Padding="6">
+            <!-- ======================= PART (CAD) ======================= -->
+            <TabItem Header="  1 · Part  ">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="440"/><ColumnDefinition Width="6"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,0,6,0">
+                            <GroupBox Header="Project">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                                    <TextBlock Text="Part name" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1" Margin="0,2" Text="{Binding Project.Name, UpdateSourceTrigger=LostFocus}"/>
+                                    <TextBlock Grid.Row="1" Text="Material" VerticalAlignment="Center"/>
+                                    <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,2" ItemsSource="{Binding MaterialNames}" SelectedItem="{Binding Project.Material}"/>
+                                    <TextBlock Grid.Row="2" Text="Units" VerticalAlignment="Center"/>
+                                    <ComboBox Grid.Row="2" Grid.Column="1" Margin="0,2" ItemsSource="{StaticResource UnitValues}" SelectedItem="{Binding Units}"/>
+                                    <CheckBox Grid.Row="3" Grid.Column="1" Margin="0,4" Content="Part off at the left end" IsChecked="{Binding Project.Part.PartOff}"/>
+                                </Grid>
+                            </GroupBox>
+                            <GroupBox Header="Stock (bar in the chuck)">
+                                <inf:PropertyEditor Target="{Binding Project.Stock}" Units="{Binding Units}"/>
+                            </GroupBox>
+                            <TabControl>
+                                <TabItem Header="Outside">
+                                    <StackPanel Margin="4">
+                                        <TextBlock TextWrapping="Wrap" Foreground="DimGray" Margin="0,0,0,4" Text="Features from the face (right) toward the chuck (left)."/>
+                                        <ListBox ItemsSource="{Binding Project.Part.OdFeatures}" SelectedItem="{Binding SelectedOd}" ItemTemplate="{StaticResource SummaryItem}" Height="150"/>
+                                        <WrapPanel Margin="0,4">
+                                            <Button Content="+ Diameter" Command="{Binding AddCylinderCommand}"/>
+                                            <Button Content="+ Taper" Command="{Binding AddTaperCommand}"/>
+                                            <Button Content="+ Arc" Command="{Binding AddArcCommand}"/>
+                                            <Button Content="▲" Command="{Binding OdUpCommand}" ToolTip="Move up"/>
+                                            <Button Content="▼" Command="{Binding OdDownCommand}" ToolTip="Move down"/>
+                                            <Button Content="Remove" Command="{Binding RemoveOdCommand}"/>
+                                        </WrapPanel>
+                                        <inf:PropertyEditor Target="{Binding SelectedOd}" Units="{Binding Units}"/>
+                                    </StackPanel>
+                                </TabItem>
+                                <TabItem Header="Bore">
+                                    <StackPanel Margin="4">
+                                        <TextBlock TextWrapping="Wrap" Foreground="DimGray" Margin="0,0,0,4" Text="Inside features from the face inward. Needs a Drill operation (or tube stock) and a boring bar."/>
+                                        <ListBox ItemsSource="{Binding Project.Part.IdFeatures}" SelectedItem="{Binding SelectedId}" ItemTemplate="{StaticResource SummaryItem}" Height="110"/>
+                                        <WrapPanel Margin="0,4">
+                                            <Button Content="+ Bore Ø" Command="{Binding AddBoreCommand}"/>
+                                            <Button Content="+ Taper" Command="{Binding AddBoreTaperCommand}"/>
+                                            <Button Content="▲" Command="{Binding IdUpCommand}"/>
+                                            <Button Content="▼" Command="{Binding IdDownCommand}"/>
+                                            <Button Content="Remove" Command="{Binding RemoveIdCommand}"/>
+                                        </WrapPanel>
+                                        <inf:PropertyEditor Target="{Binding SelectedId}" Units="{Binding Units}"/>
+                                    </StackPanel>
+                                </TabItem>
+                                <TabItem Header="Grooves">
+                                    <StackPanel Margin="4">
+                                        <ListBox ItemsSource="{Binding Project.Part.Grooves}" SelectedItem="{Binding SelectedGroove}" ItemTemplate="{StaticResource SummaryItem}" Height="110"/>
+                                        <WrapPanel Margin="0,4">
+                                            <Button Content="+ Groove" Command="{Binding AddGrooveCommand}"/>
+                                            <Button Content="Remove" Command="{Binding RemoveGrooveCommand}"/>
+                                        </WrapPanel>
+                                        <inf:PropertyEditor Target="{Binding SelectedGroove}" Units="{Binding Units}"/>
+                                    </StackPanel>
+                                </TabItem>
+                                <TabItem Header="Threads">
+                                    <StackPanel Margin="4">
+                                        <TextBlock TextWrapping="Wrap" Foreground="DimGray" Margin="0,0,0,4" Text="Put the thread on a diameter that matches its major Ø (or a bore at its minor Ø). Add a relief groove at the end. Right-hand threads."/>
+                                        <ListBox ItemsSource="{Binding Project.Part.Threads}" SelectedItem="{Binding SelectedThread}" ItemTemplate="{StaticResource SummaryItem}" Height="90"/>
+                                        <WrapPanel Margin="0,4">
+                                            <Button Content="+ Thread" Command="{Binding AddThreadCommand}"/>
+                                            <Button Content="Remove" Command="{Binding RemoveThreadCommand}"/>
+                                        </WrapPanel>
+                                        <inf:PropertyEditor Target="{Binding SelectedThread}" Units="{Binding Units}"/>
+                                    </StackPanel>
+                                </TabItem>
+                            </TabControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+                    <Grid Grid.Column="2">
+                        <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="140"/></Grid.RowDefinitions>
+                        <Border BorderBrush="#CCD3DD" BorderThickness="1"><inf:LatheView Scene="{Binding PartScene}"/></Border>
+                        <ListBox Grid.Row="1" Margin="0,6,0,0" ItemsSource="{Binding PartIssues}" ItemTemplate="{StaticResource IssueTemplate}"/>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- ======================= TOOLS ======================= -->
+            <TabItem Header="  2 · Tools  ">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="440"/><ColumnDefinition Width="6"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,0,6,0">
+                            <GroupBox Header="Tools in this setup">
+                                <StackPanel>
+                                    <ListBox ItemsSource="{Binding Project.Tools}" SelectedItem="{Binding SelectedTool}" ItemTemplate="{StaticResource SummaryItem}" Height="170"/>
+                                    <WrapPanel Margin="0,4">
+                                        <Button Content="+ Turning" Command="{Binding AddToolCommand}" CommandParameter="turn"/>
+                                        <Button Content="+ Profiling (V)" Command="{Binding AddToolCommand}" CommandParameter="profile"/>
+                                        <Button Content="+ Boring bar" Command="{Binding AddToolCommand}" CommandParameter="bore"/>
+                                        <Button Content="+ Grooving" Command="{Binding AddToolCommand}" CommandParameter="groove"/>
+                                        <Button Content="+ Parting" Command="{Binding AddToolCommand}" CommandParameter="part"/>
+                                        <Button Content="+ Thread OD" Command="{Binding AddToolCommand}" CommandParameter="threadod"/>
+                                        <Button Content="+ Thread ID" Command="{Binding AddToolCommand}" CommandParameter="threadid"/>
+                                        <Button Content="+ Drill" Command="{Binding AddToolCommand}" CommandParameter="drill"/>
+                                        <Button Content="+ Center drill" Command="{Binding AddToolCommand}" CommandParameter="center"/>
+                                        <Button Content="Remove" Command="{Binding RemoveToolCommand}"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </GroupBox>
+                            <GroupBox Header="Selected tool">
+                                <inf:PropertyEditor Target="{Binding SelectedTool}" Units="{Binding Units}"/>
+                            </GroupBox>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+                    <Border Grid.Column="2" BorderBrush="#CCD3DD" BorderThickness="1"><inf:LatheView Scene="{Binding ToolScene}"/></Border>
+                </Grid>
+            </TabItem>
+
+            <!-- ======================= PROGRAM (CAM) ======================= -->
+            <TabItem Header="  3 · Program  ">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="440"/><ColumnDefinition Width="6"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,0,6,0">
+                            <GroupBox Header="Operations (run top to bottom)">
+                                <StackPanel>
+                                    <ListBox ItemsSource="{Binding Project.Operations}" SelectedItem="{Binding SelectedOp}" Height="190">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <CheckBox IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                    <TextBlock Text="{Binding Summary}"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                    <WrapPanel Margin="0,4">
+                                        <Button Content="+ Face" Command="{Binding AddOpCommand}" CommandParameter="face"/>
+                                        <Button Content="+ OD rough" Command="{Binding AddOpCommand}" CommandParameter="odrough"/>
+                                        <Button Content="+ OD finish" Command="{Binding AddOpCommand}" CommandParameter="odfinish"/>
+                                        <Button Content="+ Center drill" Command="{Binding AddOpCommand}" CommandParameter="center"/>
+                                        <Button Content="+ Drill" Command="{Binding AddOpCommand}" CommandParameter="drill"/>
+                                        <Button Content="+ ID rough" Command="{Binding AddOpCommand}" CommandParameter="idrough"/>
+                                        <Button Content="+ ID finish" Command="{Binding AddOpCommand}" CommandParameter="idfinish"/>
+                                        <Button Content="+ Groove" Command="{Binding AddOpCommand}" CommandParameter="groove"/>
+                                        <Button Content="+ Thread" Command="{Binding AddOpCommand}" CommandParameter="thread"/>
+                                        <Button Content="+ Thread ID" Command="{Binding AddOpCommand}" CommandParameter="threadid"/>
+                                        <Button Content="+ Part off" Command="{Binding AddOpCommand}" CommandParameter="partoff"/>
+                                        <Button Content="▲" Command="{Binding OpUpCommand}"/>
+                                        <Button Content="▼" Command="{Binding OpDownCommand}"/>
+                                        <Button Content="Remove" Command="{Binding RemoveOpCommand}"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </GroupBox>
+                            <GroupBox Header="Selected operation">
+                                <inf:PropertyEditor Target="{Binding SelectedOp}" Units="{Binding Units}" Tools="{Binding Project.Tools}"/>
+                            </GroupBox>
+                            <Button Style="{StaticResource Go}" Content="Generate + simulate  (F5)" Command="{Binding GenerateCommand}" HorizontalAlignment="Stretch"/>
+                            <TextBlock Text="{Binding ProgramSummary}" TextWrapping="Wrap" Margin="0,6" FontWeight="SemiBold"/>
+                            <TextBlock Text="⚠ Out of date: regenerate before running." Foreground="{StaticResource Danger}" Visibility="{Binding OutOfDate, Converter={StaticResource BoolVis}}"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+                    <Grid Grid.Column="2">
+                        <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/><RowDefinition Height="6"/><RowDefinition Height="240"/></Grid.RowDefinitions>
+                        <Border BorderBrush="#CCD3DD" BorderThickness="1"><inf:LatheView Scene="{Binding ProgramScene}"/></Border>
+                        <DockPanel Grid.Row="1" Margin="0,4,0,0">
+                            <TextBlock Text="Show up to operation:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding ScrubOp}" Width="30" VerticalAlignment="Center"/>
+                            <Slider x:Name="Scrub" Minimum="-1" Maximum="20" SmallChange="1" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding ScrubOp}" ToolTip="-1 = all operations"/>
+                        </DockPanel>
+                        <GridSplitter Grid.Row="2" Height="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+                        <TabControl Grid.Row="3">
+                            <TabItem Header="Problems">
+                                <ListBox ItemsSource="{Binding ProgramIssues}" ItemTemplate="{StaticResource IssueTemplate}"/>
+                            </TabItem>
+                            <TabItem Header="G-code">
+                                <ae:TextEditor x:Name="Gcode" IsReadOnly="True" FontFamily="Consolas" FontSize="12" ShowLineNumbers="True"/>
+                            </TabItem>
+                        </TabControl>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- ======================= MACHINE (controller) ======================= -->
+            <TabItem Header="  4 · Machine  " DataContext="{Binding MachineVm}">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="400"/><ColumnDefinition Width="6"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,0,6,0">
+                            <GroupBox Header="Connection">
+                                <StackPanel>
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Right" Content="⟳" Command="{Binding RefreshPortsCommand}" ToolTip="Refresh ports"/>
+                                        <ComboBox ItemsSource="{Binding Ports}" SelectedItem="{Binding SelectedPort}" Margin="0,2,6,2" IsEnabled="{Binding Connected, Converter={StaticResource Not}}"/>
+                                    </DockPanel>
+                                    <WrapPanel>
+                                        <Button Content="Connect" Command="{Binding ConnectCommand}" IsEnabled="{Binding Connected, Converter={StaticResource Not}}"/>
+                                        <Button Content="Disconnect" Command="{Binding DisconnectCommand}" IsEnabled="{Binding Connected}"/>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding ControllerText}" Foreground="DimGray" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </GroupBox>
+                            <GroupBox Header="Position (work coordinates)">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="60"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                                    <TextBlock Text="X Ø" FontSize="22" VerticalAlignment="Center" Foreground="DimGray"/>
+                                    <TextBlock Grid.Column="1" Style="{StaticResource Dro}" Text="{Binding XDia, StringFormat={}{0:0.000}}"/>
+                                    <TextBlock Grid.Row="1" Text="Z" FontSize="22" VerticalAlignment="Center" Foreground="DimGray"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource Dro}" Text="{Binding Z, StringFormat={}{0:0.000}}"/>
+                                    <TextBlock Grid.Row="2" Grid.ColumnSpan="2" HorizontalAlignment="Right" FontSize="13">
+                                        <Run Text="{Binding StateText, Mode=OneWay}" FontWeight="Bold"/><Run Text="   S "/><Run Text="{Binding Rpm, Mode=OneWay, StringFormat={}{0:0}}"/><Run Text=" rpm   F "/><Run Text="{Binding Feed, Mode=OneWay, StringFormat={}{0:0.###}}"/>
+                                    </TextBlock>
+                                    <TextBlock Grid.Row="3" Grid.ColumnSpan="2" HorizontalAlignment="Right" Foreground="DimGray" Text="{Binding Overrides}"/>
+                                </Grid>
+                            </GroupBox>
+                            <WrapPanel Margin="0,0,0,8" IsEnabled="{Binding Connected}">
+                                <Button Content="Home ($H)" Command="{Binding HomeCommand}"/>
+                                <Button Content="Unlock ($X)" Command="{Binding UnlockCommand}"/>
+                                <Button Content="Reset" Command="{Binding ResetCommand}"/>
+                            </WrapPanel>
+                            <GroupBox Header="Jog (arrow keys too: ←→ Z, ↑↓ X)" IsEnabled="{Binding Connected}">
+                                <StackPanel>
+                                    <WrapPanel>
+                                        <CheckBox Content="Hold to jog (continuous)" IsChecked="{Binding JogContinuous}" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Step" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <ComboBox ItemsSource="{Binding JogSteps}" SelectedItem="{Binding JogStep}" Width="70" IsEnabled="{Binding JogContinuous, Converter={StaticResource Not}}"/>
+                                        <TextBlock Text=" mm   Feed" VerticalAlignment="Center" Margin="4,0"/>
+                                        <TextBox Text="{Binding JogFeed}" Width="60"/>
+                                    </WrapPanel>
+                                    <CheckBox x:Name="KeyJog" Content="Enable arrow-key jogging on this tab" Margin="0,4"/>
+                                    <Grid Width="220" Height="120" Margin="0,4">
+                                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                                        <Button Grid.Column="1" Content="X+ ▲" Tag="X+" PreviewMouseLeftButtonDown="Jog_Down" PreviewMouseLeftButtonUp="Jog_Up" MouseLeave="Jog_Leave"/>
+                                        <Button Grid.Row="1" Content="◀ Z−" Tag="Z-" PreviewMouseLeftButtonDown="Jog_Down" PreviewMouseLeftButtonUp="Jog_Up" MouseLeave="Jog_Leave"/>
+                                        <Button Grid.Row="1" Grid.Column="2" Content="Z+ ▶" Tag="Z+" PreviewMouseLeftButtonDown="Jog_Down" PreviewMouseLeftButtonUp="Jog_Up" MouseLeave="Jog_Leave"/>
+                                        <Button Grid.Row="2" Grid.Column="1" Content="X− ▼" Tag="X-" PreviewMouseLeftButtonDown="Jog_Down" PreviewMouseLeftButtonUp="Jog_Up" MouseLeave="Jog_Leave"/>
+                                    </Grid>
+                                </StackPanel>
+                            </GroupBox>
+                            <GroupBox Header="Spindle and coolant" IsEnabled="{Binding Connected}">
+                                <StackPanel>
+                                    <WrapPanel>
+                                        <TextBox Text="{Binding SpindleRpm}" Width="70" Margin="0,2,6,2"/>
+                                        <Button Content="Start (M3)" Command="{Binding SpindleCwCommand}"/>
+                                        <Button Content="Stop (M5)" Command="{Binding SpindleStopCommand}"/>
+                                        <Button Content="Coolant on" Command="{Binding CoolantOnCommand}"/>
+                                        <Button Content="off" Command="{Binding CoolantOffCommand}"/>
+                                    </WrapPanel>
+                                    <WrapPanel>
+                                        <TextBlock Text="Feed %" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <Button Content="−10" Command="{Binding FeedOvCommand}" CommandParameter="-10"/>
+                                        <Button Content="100" Command="{Binding FeedOvCommand}" CommandParameter="0"/>
+                                        <Button Content="+10" Command="{Binding FeedOvCommand}" CommandParameter="10"/>
+                                        <TextBlock Text="Spindle %" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                                        <Button Content="−10" Command="{Binding SpindleOvCommand}" CommandParameter="-10"/>
+                                        <Button Content="100" Command="{Binding SpindleOvCommand}" CommandParameter="0"/>
+                                        <Button Content="+10" Command="{Binding SpindleOvCommand}" CommandParameter="10"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </GroupBox>
+                            <GroupBox Header="Work zero and tool offsets" IsEnabled="{Binding Connected}">
+                                <StackPanel>
+                                    <DockPanel Margin="0,2">
+                                        <TextBlock Text="Installed tool" Width="100" VerticalAlignment="Center"/>
+                                        <ComboBox AutomationProperties.Name="Installed tool combo" ItemsSource="{Binding Tools}" DisplayMemberPath="Summary" SelectedValuePath="Number" SelectedValue="{Binding InstalledTool}"/>
+                                    </DockPanel>
+                                    <TextBlock TextWrapping="Wrap" Foreground="DimGray" Margin="0,2" Text="Z: face the end (or touch it), then Set Z0. X: take a skim cut, measure the diameter, enter it, then Set X."/>
+                                    <WrapPanel>
+                                        <Button Content="Set Z0 here" Command="{Binding SetZ0Command}"/>
+                                        <TextBlock Text="Measured Ø" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBox Text="{Binding MeasuredDia}" Width="70" Margin="0,2,6,2"/>
+                                        <Button Content="Set X" Command="{Binding SetXCommand}"/>
+                                    </WrapPanel>
+                                    <WrapPanel>
+                                        <Button Content="Learn Z offset" Command="{Binding LearnZCommand}" ToolTip="With a different tool installed, touch the same face, then click."/>
+                                        <Button Content="Learn X offset" Command="{Binding LearnXCommand}" ToolTip="With a different tool installed, touch the measured diameter, then click."/>
+                                        <Button Content="Use current G54" Command="{Binding UseCurrentG54Command}"/>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding WorkZeroText}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </GroupBox>
+                            <GroupBox Header="MDI (type a G-code line)" IsEnabled="{Binding Connected}">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Content="Send" Command="{Binding SendMdiCommand}"/>
+                                    <ComboBox AutomationProperties.Name="MDI line" IsEditable="True" Text="{Binding MdiText, UpdateSourceTrigger=PropertyChanged}" ItemsSource="{Binding MdiHistory}" Margin="0,2,6,2" KeyDown="Mdi_KeyDown"/>
+                                </DockPanel>
+                            </GroupBox>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+                    <Grid Grid.Column="2">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/><RowDefinition Height="150"/></Grid.RowDefinitions>
+                        <Border Padding="8,6" Margin="0,0,0,6" CornerRadius="3">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="#E3EEF9"/>
+                                    <Style.Triggers><DataTrigger Binding="{Binding BannerIsError}" Value="True"><Setter Property="Background" Value="#FFD9D9"/></DataTrigger></Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <TextBlock Text="{Binding Banner}" TextWrapping="Wrap" FontWeight="SemiBold"/>
+                        </Border>
+                        <Border Grid.Row="1" BorderBrush="#CCD3DD" BorderThickness="1"><inf:LatheView Scene="{Binding Scene}"/></Border>
+                        <Grid Grid.Row="2" Margin="0,6">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <GroupBox Header="Before you press Run">
+                                <ItemsControl ItemsSource="{Binding Checks}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Icon}" Width="18" FontWeight="Bold" Foreground="{Binding Converter={StaticResource CheckBrush}}"/>
+                                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" MaxWidth="560"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </GroupBox>
+                            <StackPanel Grid.Column="1" Margin="8,0,0,0" Width="330">
+                                <WrapPanel>
+                                    <Button Style="{StaticResource Go}" Content="▶ Run" Command="{Binding RunCommand}" IsEnabled="{Binding CanRun}"/>
+                                    <Button Style="{StaticResource Big}" Content="❚❚ Hold" Command="{Binding FeedHoldCommand}" IsEnabled="{Binding Connected}"/>
+                                    <Button Style="{StaticResource Big}" Content="Resume" Command="{Binding ResumeCommand}" IsEnabled="{Binding Connected}"/>
+                                    <Button Style="{StaticResource Stop}" Content="■ Stop" Command="{Binding StopCommand}" IsEnabled="{Binding Running}"/>
+                                </WrapPanel>
+                                <WrapPanel>
+                                    <Button Content="Run from:" Command="{Binding RunFromOpCommand}" IsEnabled="{Binding CanRun}"/>
+                                    <ComboBox ItemsSource="{Binding OpNames}" SelectedIndex="{Binding StartOp}" Width="200" Margin="0,2"/>
+                                </WrapPanel>
+                                <WrapPanel>
+                                    <Button Content="Check on controller ($C)" Command="{Binding CheckOnControllerCommand}" IsEnabled="{Binding Connected}"/>
+                                    <CheckBox Content="Air cut (+20 mm Z)" IsChecked="{Binding AirCut}" VerticalAlignment="Center" IsEnabled="{Binding Running, Converter={StaticResource Not}}"/>
+                                </WrapPanel>
+                                <ProgressBar Height="14" Value="{Binding Progress}" Margin="0,4"/>
+                                <TextBlock Text="{Binding RunText}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Grid>
+                        <ListBox Grid.Row="3" ItemsSource="{Binding ConsoleLines}" FontFamily="Consolas" FontSize="11" x:Name="ConsoleList"/>
+                    </Grid>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>
